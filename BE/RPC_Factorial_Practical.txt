@@ -1,0 +1,253 @@
+        Aim: Distributed application using RPC where client sends an integer
+             to server, server calculates factorial and returns result.
+
+STEP 1 - OPEN TERMINAL
+Press Ctrl + Alt + T
+
+STEP 2 - INSTALL ALL REQUIRED PACKAGES
+sudo apt-get update
+sudo apt-get install -y build-essential rpcbind libtirpc-dev rpcgen
+
+STEP 3 - START RPCBIND SERVICE
+sudo service rpcbind start
+sudo service rpcbind status
+(Look for: Active: active (running))
+
+STEP 4 - CREATE PROJECT FOLDER
+mkdir ~/exp2
+cd ~/exp2
+
+STEP 5 - CREATE IDL FILE
+Command:
+    gedit fact.x
+
+Paste the following code in gedit, then press Ctrl+S and close:
+
+-------- fact.x --------
+struct intpair {
+    int a;
+};
+
+program FACT_PROG {
+    version FACT_VERS {
+        int FACT(intpair) = 1;
+    } = 1;
+} = 0x23451111;
+
+STEP 6 - GENERATE STUBS USING RPCGEN
+rpcgen -a -C fact.x
+
+Verify files created (run: ls)
+You should see:
+    fact.h  fact_clnt.c  fact_server.c  fact_client.c  fact_xdr.c  Makefile.fact
+
+STEP 7 - EDIT MAKEFILE
+Command:
+    gedit Makefile.fact
+
+Make the following 3 changes using Ctrl+H (Find & Replace):
+
+    Change 1:
+        FIND:    CFLAGS += -g
+        REPLACE: CFLAGS += -g -DRPC_SVC_FG -I/usr/include/tirpc
+
+    Change 2:
+        FIND:    RPCGENFLAGS =
+        REPLACE: RPCGENFLAGS = -C
+
+    Change 3:
+        FIND:    LDLIBS =
+        REPLACE: LDLIBS = -ltirpc
+
+Press Ctrl+S and close.
+
+STEP 8 - EDIT CLIENT FILE
+Command:
+    gedit fact_client.c
+
+Press Ctrl+A to select all, delete everything, then paste the following code.
+Press Ctrl+S and close.
+
+-------- fact_client.c --------
+#include "fact.h"
+
+void fact_prog_1(char *host, int a) {
+    CLIENT *clnt;
+    int *result_1;
+    intpair fact_1_arg;
+
+#ifndef DEBUG
+    clnt = clnt_create(host, FACT_PROG, FACT_VERS, "udp");
+    if (clnt == NULL) {
+        clnt_pcreateerror(host);
+        exit(1);
+    }
+#endif
+
+    fact_1_arg.a = a;
+    result_1 = fact_1(&fact_1_arg, clnt);
+
+    if (result_1 == (int *) NULL) {
+        clnt_perror(clnt, "call failed");
+    } else {
+        printf("Factorial = %d\n", *result_1);
+    }
+
+#ifndef DEBUG
+    clnt_destroy(clnt);
+#endif
+}
+
+int main(int argc, char *argv[]) {
+    char *host;
+    int a, ch;
+
+    if (argc < 2) {
+        printf("usage: %s server_host\n", argv[0]);
+        exit(1);
+    }
+    host = argv[1];
+
+    do {
+        system("clear");
+        printf("\nEnter a number: ");
+        scanf("%d", &a);
+        fact_prog_1(host, a);
+        printf("\nTry again? (1=Yes / 0=No): ");
+        scanf("%d", &ch);
+    } while (ch == 1);
+
+    exit(0);
+}
+
+STEP 9 - EDIT SERVER FILE
+Command:
+    gedit fact_server.c
+
+Press Ctrl+A to select all, delete everything, then paste the following code.
+Press Ctrl+S and close.
+
+-------- fact_server.c --------
+#include "fact.h"
+
+int * fact_1_svc(intpair *argp, struct svc_req *rqstp) {
+    static int result;
+    int n, fact, i;
+
+    n = argp->a;
+    fact = 1;
+
+    printf("\nReceived: n = %d\n", n);
+
+    for (i = n; i > 0; i--) {
+        fact = fact * i;
+    }
+
+    result = fact;
+    return &result;
+}
+
+STEP 10 - COMPILE
+make -f Makefile.fact
+
+No red errors = Compiled successfully.
+Verify executables exist:
+    ls -l fact_server fact_client
+
+STEP 11 - RUN THE PROGRAM (TWO TERMINALS NEEDED)
+Open a second terminal: Ctrl+Alt+T
+
+    TERMINAL 1 - Start the Server:
+        cd ~/exp2
+        sudo ./fact_server
+
+    (Server will sit waiting silently. That is correct.)
+
+    TERMINAL 2 - Run the Client:
+        cd ~/exp2
+        ./fact_client localhost
+
+EXPECTED OUTPUT
+
+    Client side:
+        Enter a number: 5
+        Factorial = 120
+
+        Try again? (1=Yes / 0=No): 1
+
+        Enter a number: 6
+        Factorial = 720
+
+        Try again? (1=Yes / 0=No): 0
+
+    Server side:
+        Received: n = 5
+        Received: n = 6
+
+COMMON ERRORS AND FIXES
+
+    ERROR: rpc/rpc.h: No such file or directory
+    FIX:   sudo apt-get install libtirpc-dev
+
+    ERROR: rpcgen: command not found
+    FIX:   sudo apt-get install rpcgen
+
+    ERROR: RPC: Program not registered
+    FIX:   Start the server first, then run the client
+
+    ERROR: Permission denied (fact_server)
+    FIX:   Use sudo ./fact_server
+
+    ERROR: rpcbind not running
+    FIX:   sudo service rpcbind start
+
+DAY-OF QUICK CHEATSHEET (MAY 12TH)
+1.  Ctrl+Alt+T
+2.  sudo apt-get update
+3.  sudo apt-get install -y build-essential rpcbind libtirpc-dev rpcgen
+4.  sudo service rpcbind start
+5.  mkdir ~/exp2 && cd ~/exp2
+6.  gedit fact.x          --> paste IDL code --> Ctrl+S --> close
+7.  rpcgen -a -C fact.x
+8.  gedit Makefile.fact   --> 3 changes --> Ctrl+S --> close
+9.  gedit fact_client.c   --> Ctrl+A, delete, paste client code --> Ctrl+S --> close
+10. gedit fact_server.c   --> Ctrl+A, delete, paste server code --> Ctrl+S --> close
+11. make -f Makefile.fact
+12. Terminal 1: cd ~/exp2 && sudo ./fact_server
+13. Terminal 2: cd ~/exp2 && ./fact_client localhost
+14. Enter number --> see factorial --> done!
+
+VIVA QUESTIONS AND ANSWERS
+
+Q1. What is RPC?
+A.  Remote Procedure Call is a protocol that allows a program to execute a
+    procedure/function on a remote machine as if it were a local call.
+
+Q2. What is Marshalling and Unmarshalling?
+A.  Marshalling is packing the parameters into a message before sending over
+    the network. Unmarshalling is unpacking those parameters at the receiver.
+
+Q3. What does rpcgen do?
+A.  rpcgen takes an IDL (.x) file and automatically generates the client stub,
+    server stub, header file, and XDR file needed for RPC communication.
+
+Q4. What is a Stub?
+A.  A stub is proxy code that hides the complexity of network communication
+    from the programmer. Client stub sends the call, server stub receives it.
+
+Q5. What transport protocol is used here?
+A.  UDP, as specified in the clnt_create() call in the client code.
+
+Q6. What is the role of rpcbind?
+A.  rpcbind maps RPC program numbers to network port addresses. It acts as
+    a name server so clients can find where the service is running.
+
+Q7. What is the IDL file (.x file)?
+A.  Interface Definition Language file. It defines the program number,
+    version, and the functions available for remote calling.
+
+Q8. What is the purpose of the static keyword in the server?
+A.  The result variable is declared static so its memory persists after the
+    function returns, allowing the pointer to it to remain valid for the client.
+
+
